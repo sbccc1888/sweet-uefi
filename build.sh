@@ -38,7 +38,7 @@ CFLAGS="-target aarch64-pc-win32-coff -std=c11 -O2 -fshort-wchar -ffreestanding 
 	-Wall -Wextra -Wno-unused-parameter -Iinclude -Isrc"
 
 objs=()
-for f in src/main.c src/gfx.c src/ui.c src/payload.c src/font.c; do
+for f in src/main.c src/gfx.c src/ui.c src/payload.c src/chain.c src/font.c; do
 	o="$OUT/$(basename "${f%.c}").o"
 	echo "  cc    $f"
 	$CLANG $CFLAGS -c "$f" -o "$o"

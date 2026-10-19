@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # test.sh -- build everything and verify the things that can be verified here.
 #
 # Three gates, in increasing cost:
@@ -25,15 +25,21 @@ else
 fi
 
 echo "== 2. layout =="
-if python3 tools/preview.py --out /tmp/preview.png --width 1080 --height 2160 2>/dev/null; then
-	if python3 tools/check_layout.py /tmp/preview.png; then
-		echo "  layout ok"
+# Two shapes matter: a sparse menu and a full one. The crowded case is what
+# exposed the accent rule colliding with the subtitle and the item array being
+# too small, so it is checked on every run rather than by hand.
+for items in 4 8; do
+	if python3 tools/preview.py --out /tmp/preview-$items.png --width 1080 \
+	    --height 2160 --selected 0 --items $items >/dev/null 2>&1; then
+		if python3 tools/check_layout.py /tmp/preview-$items.png; then
+			echo "  $items entries: layout ok"
+		else
+			echo "  LAYOUT FAILED at $items entries"; fail=1
+		fi
 	else
-		echo "  LAYOUT FAILED"; fail=1
+		echo "  RENDER FAILED at $items entries (python3-pil?)"; fail=1
 	fi
-else
-	echo "  RENDER FAILED (is python3-pil installed?)"; fail=1
-fi
+done
 
 echo "== 3. structure layout =="
 if python3 tools/check_efi_layout.py; then

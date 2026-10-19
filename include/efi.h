@@ -1,4 +1,4 @@
-/*
+﻿/*
  * efi.h -- the small, self-contained subset of UEFI this application needs.
  *
  * Deliberately not edk2 and not gnu-efi: this is a single freestanding EFI
@@ -40,6 +40,9 @@ typedef UINTN              EFI_TPL;
 
 #define EFI_TRUE  1
 #define EFI_FALSE 0
+/* LoadImage and Blt take a plain BOOLEAN; the spec uses both spellings. */
+#define TRUE      1
+#define FALSE     0
 
 /* ---- status codes (spec appendix D) ---- */
 #define EFI_SUCCESS            0ULL
@@ -337,6 +340,39 @@ struct EFI_RUNTIME_SERVICES {
 #define EFI_FILE_INFO_ID \
 	{ 0x09576e92, 0x6d3f, 0x11d2, \
 	  { 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b } }
+
+/* ---- device paths (spec 10.3), enough to name one file ---- */
+typedef struct {
+	UINT8 Type;
+	UINT8 SubType;
+	UINT8 Length[2];
+} EFI_DEVICE_PATH_PROTOCOL;
+
+enum {
+	DEVICE_PATH_TYPE_HARDWARE   = 0x01,
+	DEVICE_PATH_TYPE_ACPI       = 0x02,
+	DEVICE_PATH_TYPE_MESSAGING  = 0x03,
+	DEVICE_PATH_TYPE_MEDIA      = 0x04,
+	DEVICE_PATH_TYPE_END        = 0x7F,
+};
+
+enum {
+	MEDIA_SUBTYPE_FILEPATH  = 0x04,
+	END_SUBTYPE_ENTIRE      = 0xFF,
+};
+
+typedef struct {
+	EFI_DEVICE_PATH_PROTOCOL Header;
+	CHAR16 PathName[1];
+} FILEPATH_DEVICE_PATH;
+
+#define EFI_DEVICE_PATH_PROTOCOL_GUID \
+	{ 0x09576e91, 0x6d3f, 0x11d2, \
+	  { 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b } }
+
+#define EFI_LOADED_IMAGE_PROTOCOL_GUID_LI \
+	{ 0x5b1b31a1, 0x9562, 0x11d2, \
+	  { 0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b } }
 
 typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {

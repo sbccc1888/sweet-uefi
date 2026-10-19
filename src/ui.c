@@ -67,16 +67,11 @@ ui_frame(struct gfx *g, struct ui_state *s, UINT32 elapsed_ms)
 	 * circles. Cheap, and it stops the background from looking like a flat
 	 * rectangle of colour.
 	 */
-	/* ---- accent rule above the title ---- */
-	{
-		UINT32 rule_w = W / 9;
-		UINT32 rule_x = (W - rule_w) / 2;
-		UINT32 rule_y = H / 8;
-
-		gfx_round_rect(g, (INT32)rule_x, (INT32)rule_y, rule_w, 5, 3, C_ACCENT);
-		gfx_round_rect(g, (INT32)(rule_x + rule_w / 3),
-		    (INT32)(rule_y + 20), rule_w / 3, 4, 2, C_ACCENT_DIM);
-	}
+	/*
+	 * Note: the accent rule is drawn with the title block further down, not
+	 * here. Its position has to follow the title, and the title's position
+	 * depends on the card height, which is not known until the layout block.
+	 */
 
 	/* ---- layout ---- */
 	margin = W / 14;
@@ -98,10 +93,38 @@ ui_frame(struct gfx *g, struct ui_state *s, UINT32 elapsed_ms)
 	}
 	card_h = (UINT32)(s->item_count * row_h +
 	    (s->item_count - 1) * row_gap) + pad * 2;
+
+	/*
+	 * If the list is too tall for the panel, shrink the ROWS, not just the
+	 * card. Clamping card_h on its own leaves the rows drawing past its bottom
+	 * edge, because their positions are computed from row_h. A phone with
+	 * several bootable images is exactly the case that reaches this.
+	 */
 	if (card_h > H - H / 5) {
-		card_h = H - H / 5;             /* never overflow the panel */
+		UINT32 limit = H - H / 5;
+		UINT32 fixed = pad * 2 + (s->item_count - 1) * row_gap;
+		UINT32 avail = limit > fixed ? limit - fixed : 0;
+		UINT32 two_lines = g_fonts[FONT_BODY].line_height +
+		    g_fonts[FONT_SMALL].line_height;
+
+		if (s->item_count > 0) {
+			row_h = avail / s->item_count;
+		}
+		if (row_h < two_lines + 4) {
+			/* Text must still fit inside the highlight pill. */
+			row_h = two_lines + 4;
+			row_gap = 2;
+		}
+		card_h = (UINT32)(s->item_count * row_h +
+		    (s->item_count - 1) * row_gap) + pad * 2;
+		if (card_h > H) {
+			card_h = H;
+		}
 	}
-	card_y = (H - card_h) / 2 + H / 28;
+	card_y = (card_h < H) ? ((H - card_h) / 2 + H / 28) : 0;
+	if (card_y + card_h > H) {
+		card_y = H > card_h ? H - card_h : 0;
+	}
 
 	/* ---- shadow + card ---- */
 	gfx_round_rect(g, (INT32)card_x + 4, (INT32)card_y + 10, card_w, card_h,
@@ -113,6 +136,24 @@ ui_frame(struct gfx *g, struct ui_state *s, UINT32 elapsed_ms)
 	/* ---- title block ---- */
 	{
 		UINT32 title_y = card_y - pad - (UINT32)(H / 100) * 16;
+
+		/*
+		 * The accent rule is positioned from the title, not from a fraction of
+		 * the screen. With a fixed H/8 the rule stayed put while a taller card
+		 * lifted the title, and it ended up under the subtitle looking like a
+		 * stray underline -- which is exactly what an eight-entry menu produced.
+		 */
+		{
+			UINT32 rule_w = W / 9;
+			UINT32 rule_x = (W - rule_w) / 2;
+			UINT32 gap   = (UINT32)(H / 40) + 24;
+			UINT32 rule_y = title_y > gap ? title_y - gap : 8;
+
+			gfx_round_rect(g, (INT32)rule_x, (INT32)rule_y, rule_w, 5, 3,
+			    C_ACCENT);
+			gfx_round_rect(g, (INT32)(rule_x + rule_w / 3),
+			    (INT32)(rule_y + 20), rule_w / 3, 4, 2, C_ACCENT_DIM);
+		}
 
 		gfx_text_centred(g, 0, (INT32)title_y,
 		    W, s->title, &g_fonts[FONT_TITLE], C_TITLE);

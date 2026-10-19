@@ -1,4 +1,4 @@
-/*
+﻿/*
  * main.c -- sweet-uefi: a graphical boot menu for the ios-sweet kernel port.
  *
  * What this is: a single freestanding UEFI application. It takes over the
@@ -19,6 +19,7 @@
 #include "font.h"
 #include "ui.h"
 #include "payload.h"
+#include "chain.h"
 
 /* How long the menu waits before booting the default entry by itself. A phone
  * has no keyboard, so an unattended timeout is not a nicety -- without it the
@@ -64,8 +65,14 @@ efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 		return 1;
 	}
 
-	/* Find the payload before the menu reads any of its accessors. */
+	/* Find the payload and any bootable EFI images before building the menu. */
 	payload_probe(image);
+
+	static struct chain_entry chain[CHAIN_MAX_ENTRIES];
+	int chain_count = chain_scan(image, ST, chain, CHAIN_MAX_ENTRIES);
+	if (chain_count < 0) {
+		chain_count = 0;
+	}
 
 	/* ---- menu contents ---- */
 	ui.title    = "ios-sweet";
@@ -73,10 +80,64 @@ efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 	ui.status   = payload_status_line();
 
 	ui.item_count = 0;
-	ui.items[ui.item_count].label  = "Start";
+
+	/*
+	 * Chained EFI images come first: those are the entries that actually run
+	 * something. Labels are the file names because that is what the user put
+	 * on the volume.
+	 */
+	for (int i = 0; i < chain_count && ui.item_count + 4 <= UI_MAX_ITEMS; i++) {
+		static char detail[CHAIN_MAX_ENTRIES][48];
+		UINT32 kb = (chain[i].size + 1023u) / 1024u;
+
+		/* "1234 KB  EFI image" without printf */
+		{
+			char *d = detail[i];
+			int   n = 0;
+			char  tmp[12];
+			int   t = 0;
+
+			if (kb >= 10000u) {
+				tmp[t++] = (char)('0' + (kb / 10000u) % 10u);
+			}
+			if (kb >= 1000u) {
+				tmp[t++] = (char)('0' + (kb / 1000u) % 10u);
+			}
+			if (kb >= 100u) {
+				tmp[t++] = (char)('0' + (kb / 100u) % 10u);
+			}
+			if (kb >= 10u) {
+				tmp[t++] = (char)('0' + (kb / 10u) % 10u);
+			}
+			tmp[t++] = (char)('0' + kb % 10u);
+			for (int k = 0; k < t && n < 44; k++) {
+				d[n++] = tmp[k];
+			}
+			for (const char *sfx = " KB  EFI image"; *sfx && n < 46; sfx++) {
+				d[n++] = *sfx;
+			}
+			d[n] = 0;
+		}
+
+		/* The UI wants char*, so narrow the UTF-16 name here. */
+		static char labels[CHAIN_MAX_ENTRIES][64];
+		{
+			int n = 0;
+
+			for (; chain[i].name[n] != 0 && n < 63; n++) {
+				labels[i][n] = (char)(chain[i].name[n] & 0xFF);
+			}
+			labels[i][n] = 0;
+		}
+		ui.items[ui.item_count].label  = labels[i];
+		ui.items[ui.item_count].detail = detail[i];
+		ui.items[ui.item_count].kind   = UI_KIND_BOOT;
+		ui.item_count++;
+	}
+
+	ui.items[ui.item_count].label  = "SWEETXNU payload";
 	ui.items[ui.item_count].detail = payload_kernel_detail();
-	ui.items[ui.item_count].kind   = payload_kernel_available()
-	    ? UI_KIND_BOOT : UI_KIND_DISABLED;
+	ui.items[ui.item_count].kind   = UI_KIND_INFO;   /* the shim boots it */
 	ui.item_count++;
 
 	ui.items[ui.item_count].label  = "Boot options";
@@ -100,6 +161,10 @@ efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 			ui.selected = i;
 			break;
 		}
+	}
+	/* With nothing chainable, the countdown would pick a dead row; hold instead. */
+	if (chain_count == 0) {
+		ui.countdown_total_ms = 0;
 	}
 
 	ui.countdown_total_ms = AUTO_BOOT_MS;
@@ -172,7 +237,7 @@ act:
 	if (ui.items[action].kind != UI_KIND_BOOT) {
 		/* Info entries are not implemented yet; say so rather than
 		 * pretending the key did nothing. */
-		ui.status = "Those panels are not implemented yet.";
+		ui.status = "That panel is not implemented yet.";
 		ui.countdown_ms = 0;
 		ui.countdown_total_ms = 0;
 		for (;;) {
@@ -189,7 +254,20 @@ act:
 		return 0;
 	}
 
-	/* ---- hand over to the kernel ---- */
+	/* ---- run the selected entry ---- */
+	if (action < (UINT32)chain_count) {
+		/*
+		 * A chained EFI image. If it returns, we get control back and drop
+		 * to the firmware console with the reason -- which is more useful
+		 * than silently re-drawing the menu.
+		 */
+		rc = chain_start(image, ST, (int)action);
+		if (rc != 0) {
+			die_text(ST, chain_last_error());
+		}
+		return 0;
+	}
+
 	rc = payload_start(ST, &g);
 	if (rc != 0) {
 		die_text(ST, payload_last_error());

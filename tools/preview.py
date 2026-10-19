@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """preview.py -- render the menu on the host so the layout can be checked.
 
 Compiling an EFI application proves nothing about how it looks. This builds the
@@ -143,6 +143,7 @@ int main(int argc, char **argv)
 	if (argc > 2) W = (UINT32)atoi(argv[2]);
 	if (argc > 3) H = (UINT32)atoi(argv[3]);
 	if (argc > 4) selected = atoi(argv[4]);
+	int items = (argc > 5) ? atoi(argv[5]) : 4;
 
 	g.width = W; g.height = H; g.stride = W;
 	g.shift_r = 16; g.shift_g = 8; g.shift_b = 0;
@@ -153,11 +154,24 @@ int main(int argc, char **argv)
 	ui.title = "ios-sweet";
 	ui.subtitle = "Xiaomi Mi MIX 2 - chiron";
 	ui.status = "No SWEETXNU payload on the boot volume.";
-	ui.item_count = 4;
-	ui.items[0].label = "Start";        ui.items[0].detail = "put payload.bin in \\sweet\\ on the ESP"; ui.items[0].kind = UI_KIND_DISABLED;
-	ui.items[1].label = "Boot options"; ui.items[1].detail = "boot-args and display mode";  ui.items[1].kind = UI_KIND_INFO;
-	ui.items[2].label = "Hardware";     ui.items[2].detail = "panel, SoC and memory as seen by the firmware"; ui.items[2].kind = UI_KIND_INFO;
-	ui.items[3].label = "Reboot";       ui.items[3].detail = 0; ui.items[3].kind = UI_KIND_INFO;
+	{
+		static const char *labels[] = {
+			"shim.efi", "sweet-uefi.efi", "bootaa64.efi", "payload.bin",
+			"tools.efi", "recovery.efi", "diags.efi", "extra.efi",
+		};
+		static const char *details[] = {
+			"196 KB  EFI image", "42 KB  EFI image", "118 KB  EFI image",
+			"payload", "9 KB  EFI image", "77 KB  EFI image",
+			"15 KB  EFI image", "3 KB  EFI image",
+		};
+		ui.item_count = (UINT32)items;
+		if (ui.item_count > 8) ui.item_count = 8;
+		for (UINT32 i = 0; i < ui.item_count; i++) {
+			ui.items[i].label = labels[i];
+			ui.items[i].detail = details[i];
+			ui.items[i].kind = UI_KIND_BOOT;
+		}
+	}
 	ui.selected = (UINT32)selected;
 	ui.highlight_y = 0;
 	ui.countdown_total_ms = 5000;
@@ -207,6 +221,7 @@ def main():
     ap.add_argument("--width", type=int, default=1080)
     ap.add_argument("--height", type=int, default=2160)
     ap.add_argument("--selected", type=int, default=1)
+    ap.add_argument("--items", type=int, default=4)
     a = ap.parse_args()
 
     tmp = tempfile.mkdtemp(prefix="sweet-ui-preview-")
@@ -232,7 +247,8 @@ def main():
 
     out = os.path.abspath(a.out)
     raw = os.path.join(tmp, "frame.raw")
-    r = subprocess.run([exe, raw, str(a.width), str(a.height), str(a.selected)],
+    r = subprocess.run([exe, raw, str(a.width), str(a.height), str(a.selected),
+                       str(a.items)],
                        capture_output=True, text=True)
     if r.returncode != 0:
         print(r.stderr[-2000:], file=sys.stderr)

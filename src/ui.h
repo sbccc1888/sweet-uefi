@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ui.h -- the boot menu.
  */
 #ifndef SWEET_UEFI_UI_H
@@ -7,7 +7,14 @@
 #include "efi.h"
 #include "gfx.h"
 
-#define UI_MAX_ITEMS 6
+/*
+ * Sized for the worst case the launcher can produce: CHAIN_MAX_ENTRIES (8)
+ * bootable images from the volume plus the four fixed rows the menu always
+ * shows. It was 6, which both risked an overflow when eight images were found
+ * and, because main.c reserves four slots for its fixed rows, silently limited
+ * the menu to TWO bootable entries.
+ */
+#define UI_MAX_ITEMS 12
 
 enum {
 	UI_KIND_BOOT = 0,   /* the default action: start the kernel  */

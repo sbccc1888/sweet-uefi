@@ -65,15 +65,40 @@ the words came out as `Bootoptions` and `XiaomiMiMIX2-chiron` -- and a second
 pass caught the selected row's second line hanging outside its highlight. Neither
 would have been visible any other way short of flashing a phone.
 
-## How it hands over
+## What it boots
 
-It does not. This launcher finds the payload, validates the `SWEETXNU` header,
-and then says plainly what it found; the segment copy and the MMU transition stay
-in the ios-sweet shim (`shim/loader.c`), which already does that job and has been
-reviewed. A menu that claims to boot and then silently returns to the firmware
-would be worse than one that names the file it could not find.
+Two different things, deliberately kept apart.
 
-Payload search order on the volume this image was loaded from:
+**EFI images are chained for real.** Every `.efi` on the volume becomes a menu
+entry, and selecting one runs it through the standard UEFI mechanism:
+
+```
+LoadImage(TRUE, self, file_device_path, NULL, 0, &handle);
+StartImage(handle, NULL, NULL);
+```
+
+The device path is assembled the way edk2's `FileDevicePath()` does it -- the
+volume's own path with its END node replaced by a MEDIA_FILEPATH node -- so
+`LoadImage` resolves the file through the Simple File System protocol itself.
+When the launched image returns, control comes back here, which is what lets this
+be a menu rather than a one-way jump.
+
+Search order, and the order entries appear:
+
+```
+\sweet\*.efi      the documented place for a payload
+\*.efi            anything else at the root
+```
+
+**The XNU kernel is not an EFI image**, and this launcher does not pretend
+otherwise. It is a Mach-O payload that `shim/loader.c` copies into place and
+enters with the MMU off. Doing that here would duplicate reviewed code and, worse,
+would put the segment copy and the MMU transition in this application. So the
+`SWEETXNU payload` row reports what it found and says where the handoff actually
+happens. Once the shim is built as (or wrapped in) an EFI application it appears
+in this menu and boots through the path above with no change here.
+
+Payload search order for that row:
 
 ```
 \sweet\payload.bin
@@ -81,13 +106,17 @@ Payload search order on the volume this image was loaded from:
 \payload.bin
 ```
 
+With no `.efi` files present the menu holds instead of counting down, because
+counting down into a row that cannot run would be worse than waiting.
+
 ## Layout
 
 ```
 include/efi.h        the UEFI subset used, transcribed from the spec
 src/gfx.{c,h}        software renderer: fill, gradient, rounded rect, AA text
 src/ui.{c,h}         the menu: layout, animation, countdown
-src/payload.{c,h}    payload discovery and validation
+src/payload.{c,h}    SWEETXNU payload discovery and validation
+src/chain.{c,h}      LoadImage/StartImage chainloading of .efi files
 src/main.c           GOP setup, input loop, frame pacing
 src/font.{c,h}       generated antialiased glyph atlases
 tools/bake_font.py   TTF -> alpha atlases (+ per-glyph rects)
@@ -114,7 +143,9 @@ would be a crash on hardware.
   preview; the EFI binary itself has **not** been booted on a phone yet.
 - The `Boot options` / `Hardware` / `Reboot` panels are placeholders and say so
   when selected.
-- Payload handoff is deliberately not implemented here; see above.
+- Chainloading is implemented but has not been exercised against a real image on
+  real firmware; the device-path arithmetic is the part most worth watching.
+- The XNU payload handoff stays in the shim; see above.
 
 ## Licence
 
