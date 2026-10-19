@@ -34,9 +34,10 @@ typeface changes.
 ./test.sh
 ```
 
-Three gates: the EFI image builds and really is PE32+ AArch64 **(1)**; the menu
-renders and its text fits inside the highlight pill **(2)**; and `include/efi.h`
-matches the UEFI specification's field offsets **(3)**.
+Four gates: the EFI image builds and really is PE32+ AArch64 **(1)**; the menu
+renders at both 4 and 8 entries and its text fits inside the highlight pill
+**(2)**; `include/efi.h` matches the UEFI specification's field offsets **(3)**;
+and the chainloader's device paths tile correctly **(4)**.
 
 Gate 3 exists because `efi.h` is transcribed by hand from the spec instead of
 vendored from edk2. One missing Boot Services entry shifts every pointer after
@@ -47,6 +48,33 @@ exactly 368 bytes (24-byte header + 43 function pointers). The first version of
 that check had three wrong expectations (`ConOut`, the total size, and the
 ordering of `Stall` vs `ExitBootServices`); the header turned out to be correct
 and the test was fixed.
+
+## The device path test
+
+Gate 4 exists because `chain.c` builds a device path by pointer arithmetic over a
+variable-length on-disk structure. Get it wrong and `LoadImage` receives a
+malformed path: the firmware rejects it, or walks past the end of the buffer.
+Nothing about that fails to compile.
+
+`tests/chain_devpath_test.c` compiles `chain.c` unchanged -- against the real
+`efi.h`, so the structures under test are the shipped ones -- with only the boot
+services it calls stubbed out. It then walks the produced path and checks the
+invariants UEFI 2.10 chapter 10.3 requires: every node's length includes its own
+4-byte header, the nodes exactly tile the buffer, the volume prefix survives byte
+for byte, the FILEPATH node carries a NUL-terminated UTF-16 name, and there is
+exactly one END node.
+
+I checked that it can actually fail by injecting three bugs one at a time; each
+was caught with a specific message:
+
+| injected bug | what the test said |
+|---|---|
+| volume END node not dropped | `no FILEPATH node`, `expected 3 nodes, got 2` |
+| FILEPATH length excludes the NUL | `FILEPATH node is 14 bytes, expected 16` |
+| node length written big-endian | `FILEPATH node is 4096 bytes, expected 16` |
+
+72 checks. A test that cannot fail is not a test, and this one was verified to
+fail in three distinct ways.
 
 ## Look at it without a phone
 
@@ -123,7 +151,9 @@ tools/bake_font.py   TTF -> alpha atlases (+ per-glyph rects)
 tools/preview.py     host render for layout review
 tools/check_layout.py  asserts the text fits its pill
 tools/check_efi_layout.py  asserts efi.h matches the specification's offsets
-test.sh              all three gates
+tools/test-chain.sh  device path arithmetic
+tests/chain_devpath_test.c  its 72 checks
+test.sh              all four gates
 ```
 
 ## Notes on the UEFI declarations

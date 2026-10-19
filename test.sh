@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 # test.sh -- build everything and verify the things that can be verified here.
 #
 # Three gates, in increasing cost:
@@ -46,6 +46,13 @@ if python3 tools/check_efi_layout.py; then
 	echo "  efi.h field offsets match the specification"
 else
 	echo "  STRUCTURE MISMATCH"; fail=1
+fi
+
+echo "== 4. device path arithmetic =="
+if ./tools/test-chain.sh; then
+	echo "  device path ok"
+else
+	echo "  DEVICE PATH FAILED"; fail=1
 fi
 
 echo
