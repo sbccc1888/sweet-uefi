@@ -28,6 +28,26 @@ Needs `clang`, `lld-link`, and `python3-pil` (Pillow rasterises the font atlas).
 The generated `src/font.c` is ~490 KB and is rebuilt only when the baker or the
 typeface changes.
 
+## Verify it
+
+```sh
+./test.sh
+```
+
+Three gates: the EFI image builds and really is PE32+ AArch64 **(1)**; the menu
+renders and its text fits inside the highlight pill **(2)**; and `include/efi.h`
+matches the UEFI specification's field offsets **(3)**.
+
+Gate 3 exists because `efi.h` is transcribed by hand from the spec instead of
+vendored from edk2. One missing Boot Services entry shifts every pointer after
+it, and the failure at runtime is arbitrary rather than a clean error. The check
+compiles a probe, reads `offsetof()` for each field this application calls, and
+compares against the values chapter 4.4 implies -- `EFI_BOOT_SERVICES` must be
+exactly 368 bytes (24-byte header + 43 function pointers). The first version of
+that check had three wrong expectations (`ConOut`, the total size, and the
+ordering of `Stall` vs `ExitBootServices`); the header turned out to be correct
+and the test was fixed.
+
 ## Look at it without a phone
 
 ```sh
@@ -73,6 +93,8 @@ src/font.{c,h}       generated antialiased glyph atlases
 tools/bake_font.py   TTF -> alpha atlases (+ per-glyph rects)
 tools/preview.py     host render for layout review
 tools/check_layout.py  asserts the text fits its pill
+tools/check_efi_layout.py  asserts efi.h matches the specification's offsets
+test.sh              all three gates
 ```
 
 ## Notes on the UEFI declarations
@@ -87,7 +109,7 @@ would be a crash on hardware.
 
 ## Status
 
-- Builds to a 193 KB PE32+ AArch64 EFI application.
+- Builds to a 193 KB PE32+ AArch64 EFI application; `./test.sh` passes.
 - The renderer, menu, input loop and payload discovery are exercised by the host
   preview; the EFI binary itself has **not** been booted on a phone yet.
 - The `Boot options` / `Hardware` / `Reboot` panels are placeholders and say so

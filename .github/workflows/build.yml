@@ -16,22 +16,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq clang lld python3-pil fonts-dejavu-core
 
-      - name: Build the EFI application
-        run: ./build.sh
+      - name: Build, render and verify
+        run: ./test.sh
 
-      - name: Verify it is a PE32+ AArch64 EFI application
+      - name: Show the design
         run: |
           file out/sweet-uefi.efi
-          file out/sweet-uefi.efi | grep -q 'PE32+ executable (EFI application) Aarch64'
-
-      - name: Render the menu and check the layout
-        run: |
-          python3 tools/preview.py --out preview.png --width 1080 --height 2160
-          python3 tools/check_layout.py preview.png
+          ls -l out/sweet-uefi.efi
 
       - uses: actions/upload-artifact@v4
         with:
           name: sweet-uefi
           path: |
             out/sweet-uefi.efi
-            preview.png
+            /tmp/preview.png
